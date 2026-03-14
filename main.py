@@ -5,13 +5,13 @@ import time
 from flask import Flask
 from threading import Thread
 
-# TOKENINGIZNI TEKSHIRIB QO'YING
+# TOKENNI TEKSHIRING
 TOKEN = '8728653741:AAEv9k3NdQfnaFtxfMY8pxrE1l3kEQC_zlk'
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
 @app.route('/')
-def h(): return "OK", 200
+def home(): return "Bot is Active", 200
 
 def run():
     port = int(os.environ.get("PORT", 10000))
@@ -19,20 +19,28 @@ def run():
 
 def get_ai(text):
     try:
-        # Blackbox o'rniga vaqtincha juda sodda API
-        res = requests.get(f"https://api.simsimi.vn/v2/?text={text}&lc=uz")
-        return res.json()['result']
-    except: return "Aloqa biroz yomon, qayta yozing."
+        # Blackbox AI
+        url = "https://api.blackbox.ai/api/chat"
+        payload = {"messages": [{"role": "user", "content": text}], "model": "deepseek-v3"}
+        res = requests.post(url, json=payload, timeout=15)
+        return res.text.split('$@$')[0].strip()
+    except:
+        return "Xatolik bo'ldi, qayta urinib ko'ring."
 
 @bot.message_handler(func=lambda m: True)
-def hdl(m):
+def handle(m):
     bot.send_chat_action(m.chat.id, 'typing')
     bot.reply_to(m, get_ai(m.text))
 
 if __name__ == "__main__":
+    # 1. Serverni yoqamiz
     Thread(target=run).start()
-    # MUHIM: Har qanday eski ulanishni majburan uzish
+    
+    # 2. Konfliktni oldini olish uchun muhim qism
+    print("Eski ulanishlar tozalanmoqda...")
     bot.remove_webhook()
-    time.sleep(2)
-    print("BOT ISHLADI!")
-    bot.polling(none_stop=True)
+    time.sleep(3) # Renderga eski nusxani o'chirishga vaqt beramiz
+    
+    print("Bot muvaffaqiyatli ishga tushdi!")
+    # 3. Pollingni boshlaymiz
+    bot.polling(none_stop=True, interval=1, timeout=20)
