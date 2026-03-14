@@ -1,69 +1,102 @@
 import telebot
 import google.generativeai as genai
 import requests
-import io
+from telebot import types
 
-# MA'LUMOTLAR - API kalitlarni tekshiring
+# --- SOZLAMALAR ---
 TELEGRAM_TOKEN = '8780847488:AAE6QJNOXrKiFZdRbKQOb1STnSHC2Lem8to'
-GEMINI_API_KEY = 'AIzaSyCSJIyBEwWvDA3h8-FDjsjSxVqoM_FzIZg'
+GEMINI_API_KEY = 'AIzaSyAsSbVpvsRpOcryHkuCkGCW4qy_MEhFHLg'
 
-# Sozlamalar
+# Gemini AI ni sozlash
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-# Rasm yaratish API (Polling AI) - API kalit shart emas
-POLLING_IMAGE_API_URL = "https://image.pollinations.ai/prompt/"
+# Botni ishga tushirish
+bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode="Markdown")
 
+# --- KLAVIATURA (MENYU) ---
+def main_menu():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    item1 = types.KeyboardButton("🤖 AI bilan gaplashish")
+    item2 = types.KeyboardButton("🎨 Rasm yaratish")
+    item3 = types.KeyboardButton("ℹ️ Yordam")
+    markup.add(item1, item2)
+    markup.add(item3)
+    return markup
+
+# --- BUYRUQLAR ---
+@bot.message_handler(commands=['start'])
+def welcome(message):
+    welcome_text = (
+        f"👋 *Assalomu alaykum, {message.from_user.first_name}!*\n\n"
+        "Men sening shaxsiy sun'iy intellekt yordamchingman.\n"
+        "Matn yozsangiz - javob beraman, 'rasm:' deb yozsangiz - chizib beraman!"
+    )
+    bot.send_message(message.chat.id, welcome_text, reply_markup=main_menu())
+
+@bot.message_handler(commands=['help'])
+def help_command(message):
+    help_text = (
+        "❓ *Qanday foydalanish kerak?*\n\n"
+        "1️⃣ **Savol bering:** Shunchaki xabar yuboring.\n"
+        "2️⃣ **Rasm yarating:** `rasm: [tavsif]` shaklida yozing.\n"
+        "   _Misol: rasm: kosmosdagi o'zbek palovi_\n"
+        "3️⃣ **Menyu:** Pastdagi tugmalardan foydalaning."
+    )
+    bot.send_message(message.chat.id, help_text)
+
+# --- ASOSIY ISHLOVCHI ---
 @bot.message_handler(func=lambda message: True)
-def chat_and_image(message):
-    text = message.text.lower().strip()
-    
-    # 1. Rasm yaratish buyrug'ini tekshirish
-    if text.startswith("rasm: ") or text.startswith("/image "):
-        # Rasm tavsifini olish
-        prompt = text[6:].strip() # "rasm: " yoki "/image " dan keyingi qismini oladi
-        
+def handle_all_messages(message):
+    msg = message.text
+    chat_id = message.chat.id
+
+    # Tugmalarni tekshirish
+    if msg == "🤖 AI bilan gaplashish":
+        bot.send_message(chat_id, "Qanday savolingiz bor? Bemalol so'rang!")
+        return
+    elif msg == "🎨 Rasm yaratish":
+        bot.send_message(chat_id, "Rasm yaratish uchun: `rasm: [tavsif]` deb yozing.")
+        return
+    elif msg == "ℹ️ Yordam":
+        help_command(message)
+        return
+
+    # RASM YARATISH (rasm: so'zi bo'lsa)
+    if msg.lower().startswith("rasm:"):
+        prompt = msg[5:].strip()
         if not prompt:
-            bot.reply_to(message, "Iltimos, rasm tavsifini yozing. Masalan: `rasm: ko'k mashina`")
+            bot.reply_to(message, "⚠️ Iltimos, rasm tavsifini kiriting!")
             return
 
-        bot.reply_to(message, f"Hozir siz uchun rasm yaratayapman: `{prompt}`. Iltimos, kuting...")
+        sent_msg = bot.reply_to(message, "🎨 *Rasm tayyorlanmoqda, kuting...*")
         
         try:
-            # Polling AI ga so'rov yuborish
-            # URL ga prompt qo'shiladi. Masalan: https://image.pollinations.ai/prompt/ko'k mashina
-            image_url = POLLING_IMAGE_API_URL + prompt.replace(' ', '%20') # URL uchun probellarni to'g'irlash
-            response = requests.get(image_url)
-            
-            if response.status_code == 200:
-                # Rasmni yuborish
-                bot.send_photo(message.chat.id, photo=image_url, caption=f"Siz so'ragan rasm: `{prompt}`")
-            else:
-                bot.reply_to(message, "Kechirasiz, rasm yaratishda xatolik bo'ldi. Keyinroq qayta urining.")
-        
+            image_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1024&height=1024&nologo=true"
+            bot.send_photo(chat_id, photo=image_url, caption=f"🖼 *Natija:* {prompt}")
+            bot.delete_message(chat_id, sent_msg.message_id)
         except Exception as e:
-            print(f"Rasm yaratishda xatolik: {e}")
-            bot.reply_to(message, "Kechirasiz, kutilmagan xatolik yuz berdi.")
-    
-    # 2. Oddiy matn xabari (Gemini AI bilan)
+            bot.edit_message_text("❌ Rasm yaratishda xatolik yuz berdi.", chat_id, sent_msg.message_id)
+
+    # MATN YARATISH (AI bilan)
     else:
+        # Bot "yozmoqda..." statusini ko'rsatadi
+        bot.send_chat_action(chat_id, 'typing')
+        
         try:
-            # Gemini AI dan javob olish
-            response = model.generate_content(message.text)
-            
+            response = model.generate_content(msg)
             if response.text:
-                bot.reply_to(message, response.text)
+                # Agar javob juda uzun bo'lsa, qismlarga bo'ladi
+                if len(response.text) > 4096:
+                    for x in range(0, len(response.text), 4096):
+                        bot.send_message(chat_id, response.text[x:x+4096])
+                else:
+                    bot.reply_to(message, response.text)
             else:
-                bot.reply_to(message, "Kechirasiz, javob topa olmadim.")
-                
+                bot.reply_to(message, "🧐 Javob topa olmadim, savolni boshqacharoq bering.")
         except Exception as e:
-            print(f"Matn yaratishda xatolik: {e}")
-            bot.reply_to(message, "Matn yaratishda xatolik yuz berdi. Iltimos, API kalitni tekshiring.")
+            bot.reply_to(message, "🛠 *Hozircha javob bera olmayman. API kalitni tekshiring yoki keyinroq urining.*")
 
-# Boshlash buyrug'i (/start)
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(message, "Salom! Men Gemini AI botman. Menga xohlagan narsangizni yozishingiz mumkin.\n\nRasm yaratish uchun `rasm: tavsif` deb yozing (masalan: `rasm: ko'k osmon`).")
-
+# Botni to'xtovsiz ishlatish
+print("Bot ishga tushdi...")
 bot.infinity_polling()
