@@ -1,44 +1,60 @@
 import telebot
 import requests
-import g4f # Bu kutubxona Gemini ishlamasa yordamga keladi
+import os
+from flask import Flask
+from threading import Thread
 from telebot import types
 
 # --- SOZLAMALAR ---
 TELEGRAM_TOKEN = '8780847488:AAE6QJNOXrKiFZdRbKQOb1STnSHC2Lem8to'
-bot = telebot.TeleBot(TELEGRAM_TOKEN, parse_mode="Markdown")
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
-def get_ai_response(user_text):
+# --- RENDER UCHUN SERVER (PORT XATOSINI YO'QOTISH) ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    # Render avtomatik PORT beradi, agar bermasa 8080 ni oladi
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- AI FUNKSIYASI ---
+def get_ai_answer(text):
     try:
-        # Tekin va kalit so'ramaydigan modeldan foydalanamiz
-        response = g4f.ChatCompletion.create(
-            model=g4f.models.gpt_4,
-            messages=[{"role": "user", "content": user_text}],
-        )
-        return response
-    except Exception as e:
-        return "Hozircha javob bera olmayman, birozdan keyin urinib ko'ring."
+        # SimSimi API (O'zbek tili uchun eng osoni)
+        res = requests.get(f"https://api.simsimi.vn/v2/?text={text}&lc=uz")
+        return res.json()['result']
+    except:
+        return "Hozircha tizimda yuklama ko'p. Birozdan keyin yozing!"
 
-# --- KLAVIATURA ---
-def main_menu():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("🤖 AI bilan gaplashish"), types.KeyboardButton("🎨 Rasm yaratish"))
-    return markup
-
+# --- TELEGRAM COMMANDS ---
 @bot.message_handler(commands=['start'])
-def welcome(message):
-    bot.reply_to(message, "Salom! Men har doim ishlaydigan AI botman. Savolingizni yozing!", reply_markup=main_menu())
+def start(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("🤖 AI Chat"), types.KeyboardButton("🎨 Rasm"))
+    bot.send_message(message.chat.id, f"Salom {message.from_user.first_name}! Bot tayyor. Savol yuboring yoki rasm chizdiring (rasm: ...)", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     msg = message.text
     if msg.lower().startswith("rasm:"):
         prompt = msg[5:].strip()
-        bot.reply_to(message, "🎨 Rasm tayyorlanyapti...")
+        bot.reply_to(message, "🎨 Rasm tayyorlanyapti, kuting...")
         image_url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
-        bot.send_photo(message.chat.id, photo=image_url)
+        bot.send_photo(message.chat.id, photo=image_url, caption=f"Natija: {prompt}")
     else:
         bot.send_chat_action(message.chat.id, 'typing')
-        ai_reply = get_ai_response(msg)
-        bot.reply_to(message, ai_reply)
+        bot.reply_to(message, get_ai_answer(msg))
 
-bot.infinity_polling()
+# --- ISHGA TUSHIRISH ---
+if __name__ == "__main__":
+    keep_alive() # Serverni orqa fonda yoqadi
+    print("Bot ishga tushdi...")
+    bot.infinity_polling()
