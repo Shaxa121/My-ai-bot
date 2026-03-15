@@ -1,100 +1,102 @@
 import telebot, requests, os, time
 from threading import Thread
 from flask import Flask
+from datetime import datetime
 
-# --- ASOSIY SOZLAMALAR ---
+# --- KONFIGURATSIYA ---
 TOKEN = '8780847488:AAFC_6Hk9CeHNdDkKTmurm-bxAq047K3G0I'
-# Siz bergan Groq API kaliti
-GROQ_API_KEY = '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'
+GEMINI_API_KEY = 'AIzaSyD9ARBdXpg-shwQWwhqTIR4T7KPmvR2Hmk'
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
-
-# Render uchun majburiy veb-server
 app = Flask(__name__)
+
+# Foydalanuvchi xotirasi (Chat History)
+# {user_id: [messages]} ko'rinishida saqlaydi
+user_memory = {}
+
 @app.route('/')
-def home(): return "SUPER-FAST AI STATUS: ONLINE", 200
+def home(): return "GEMINI WITH MEMORY: ONLINE", 200
 
 def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
-# --- GROQ AI LOGIKASI ---
-class GroqAI:
+# --- GEMINI LOGIKASI ---
+class SmartGemini:
     def __init__(self):
-        self.url = "https://api.groq.com/openai/v1/chat/completions"
-        self.session = requests.Session()
-        self.headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+        self.headers = {'Content-Type': 'application/json'}
 
-    def ask(self, user_text):
+    def ask(self, user_id, text):
+        # 1. Haqiqiy vaqtni olish
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        # 2. Xotirani tekshirish (agar yangi foydalanuvchi bo'lsa)
+        if user_id not in user_memory:
+            user_memory[user_id] = []
+        
+        # 3. System Prompt (Botga kimligini eslatish)
+        history_context = [
+            {"role": "user", "parts": [{"text": f"Sen aqlli yordamchisan. Hozirgi sana va vaqt: {now}. O'zbek tilida gaplashasan va avvalgi suhbatimizni eslab qolishing kerak."}]},
+            {"role": "model", "parts": [{"text": "Tushundim, suhbatni eslab qolaman va vaqtni inobatga olaman. Qanday yordam bera olaman?"}]}
+        ]
+        
+        # 4. Foydalanuvchi xotirasini qo'shish (oxirgi 10 ta xabar)
+        history_context.extend(user_memory[user_id][-10:])
+        
+        # 5. Yangi savolni qo'shish
+        history_context.append({"role": "user", "parts": [{"text": text}]})
+
         try:
             payload = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {
-                        "role": "system", 
-                        "content": "Sen universal professional yordamchisan. Har qanday fan (matematika, tarix, fizika) bo'yicha mukammal bilasan. O'zbek tilida juda tez va aniq javob ber."
-                    },
-                    {"role": "user", "content": user_text}
-                ],
-                "temperature": 0.6,
-                "max_tokens": 2048
+                "contents": history_context,
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "maxOutputTokens": 2048
+                }
             }
-            # Groq juda tez bo'lgani uchun timeoutni 20 soniya qo'yamiz
-            res = self.session.post(self.url, json=payload, headers=self.headers, timeout=20)
+            res = requests.post(self.url, json=payload, headers=self.headers, timeout=30)
             
             if res.status_code == 200:
-                return res.json()['choices'][0]['message']['content'].strip()
+                ans = res.json()['candidates'][0]['content']['parts'][0]['text']
+                
+                # 6. Xabarlarni xotiraga saqlash
+                user_memory[user_id].append({"role": "user", "parts": [{"text": text}]})
+                user_memory[user_id].append({"role": "model", "parts": [{"text": ans}]})
+                
+                return ans
             else:
-                return f"⚠️ API xatosi (Status: {res.status_code})"
+                return f"⚠️ API xatosi: {res.status_code}"
         except Exception as e:
-            return "❌ Ulanishda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring."
+            return "❌ Xatolik yuz berdi. Iltimos, qayta urinib ko'ring."
 
-ai = GroqAI()
+ai = SmartGemini()
 
-# --- BOT KOMANDALARI ---
-@bot.message_handler(commands=['start'])
-def start(m):
-    welcome_msg = (
-        "🚀 *Super-Fast AI Botga xush kelibsiz!*\n\n"
-        "Men hozirda eng tezkor **Groq LPU** chiplarida ishlayapman.\n"
-        "Savolingizni bering, men srazu javob beraman!"
-    )
-    bot.send_message(m.chat.id, welcome_msg)
+# --- HANDLERS ---
+@bot.message_handler(commands=['start', 'clear'])
+def start_cmd(m):
+    if m.text == '/clear':
+        user_memory[m.from_user.id] = []
+        bot.reply_to(m, "🧹 **Xotira tozalandi!** Endi suhbatni yangidan boshlashimiz mumkin.")
+    else:
+        bot.reply_to(m, "🌟 **Salom! Men xotiraga ega Master AI botman.**\n\nMen avvalgi gaplaringizni eslab qolaman va vaqtni bilaman. Savol bering!")
 
 @bot.message_handler(func=lambda m: True)
-def handle(m):
-    # 'typing' holatini yuboramiz
+def handle_msg(m):
     bot.send_chat_action(m.chat.id, 'typing')
     
-    # AI dan javobni olish
-    response = ai.ask(m.text)
+    # User ID va matnni yuboramiz
+    response = ai.ask(m.from_user.id, m.text)
     
-    # Telegram xabar limiti (4096 belgi) bo'yicha bo'lib yuborish
     try:
         if len(response) > 4000:
             for x in range(0, len(response), 4000):
                 bot.send_message(m.chat.id, response[x:x+4000])
         else:
             bot.reply_to(m, response)
-    except Exception as e:
-        # Markdown xatosi bo'lsa, oddiy matn sifatida yuboradi
+    except Exception:
         bot.send_message(m.chat.id, response)
 
-# --- ISHGA TUSHIRISH ---
 if __name__ == "__main__":
-    # 1. Serverni fonda yoqish
     Thread(target=run_web).start()
-    
-    # 2. Konfliktlarni tozalash
     bot.remove_webhook()
-    time.sleep(1)
-    
-    # 3. Uzluksiz polling
-    while True:
-        try:
-            bot.polling(none_stop=True, interval=0, timeout=40)
-        except Exception:
-            time.sleep(5)
+    bot.polling(none_stop=True)
