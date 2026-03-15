@@ -6,15 +6,15 @@ import logging
 from threading import Thread
 from flask import Flask
 
-# --- SOZLAMALAR ---
-TOKEN = '8780847488:AAGzf7a3CbKf5U88d8yEkUADLb8E8LuQvus'
+# --- YANGI TOKEN ---
+TOKEN = '8780847488:AAFC_6Hk9CeHNdDkKTmurm-bxAq047K3G0I'
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# Render uchun Veb-server (Majburiy)
+# Render uchun Veb-server
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "Pollinations AI Bot Render'da 100% faol!", 200
+    return "AI Bot status: ACTIVE", 200
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
@@ -24,30 +24,36 @@ def run_web():
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- YANGI, KALIT SO'RAMAYDIGAN AI ---
+# --- TAKOMILLASHTIRILGAN AI TIZIMI ---
 class SmartAI:
     def get_answer(self, prompt, attempt=1):
         if attempt > 3:
-            return "Kechirasiz, ulanishda xatolik bo'ldi. Keyinroq urinib ko'ring. 😔"
+            return "Kechirasiz, hozir bog'lanishda qiyinchilik bo'lyapti. 😔"
         try:
             url = "https://text.pollinations.ai/"
+            # AI'ga aniqroq ko'rsatma (System Prompt) beramiz
             payload = {
                 "messages": [
-                    {"role": "system", "content": "Sen juda aqlli va yordamsevar botsan. Har doim O'zbek tilida, tushunarli javob berasan."},
+                    {
+                        "role": "system", 
+                        "content": "Sen aqlli, o'zbek tilida mukammal so'zlashuvchi AI botsan. Foydalanuvchi savollariga aniq, lirik chekinishlarsiz va foydali javob berasan."
+                    },
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                "cache": True # Tezlikni oshirish uchun
             }
-            logger.info(f"So'rov yuborilmoqda... (Urinish: {attempt})")
             
-            # Hech qanday Header yoki API kalit kerak emas!
             response = requests.post(url, json=payload, timeout=30)
             
             if response.status_code == 200:
-                return response.text.strip()
+                answer = response.text.strip()
+                if not answer:
+                    return "AI bo'sh javob qaytardi, iltimos qayta yozing."
+                return answer
             else:
-                logger.warning(f"AI Xatosi: {response.status_code}. Qayta urinish...")
+                logger.warning(f"Xato kodi: {response.status_code}. Qayta urinish...")
         except Exception as e:
-            logger.error(f"Ulanish xatosi: {e}")
+            logger.error(f"Xato: {e}")
             
         time.sleep(2)
         return self.get_answer(prompt, attempt + 1)
@@ -55,38 +61,43 @@ class SmartAI:
 ai = SmartAI()
 
 # --- BOT KOMANDALARI ---
-@bot.message_handler(commands=['start', 'help'])
+@bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "🤖 *Yangi AI Bot ishga tushdi!*\n\nMen hech qanday API kalitsiz ishlayman. Savolingizni bering:")
+    bot.reply_to(message, "🌟 *Aqlli AI botingiz tayyor!*\n\nYangi token o'rnatildi va tizim takomillashtirildi. Savolingizni bering:")
 
 @bot.message_handler(func=lambda m: True)
 def chat(message):
+    # Foydalanuvchiga bot o'ylayotganini bildirish
     bot.send_chat_action(message.chat.id, 'typing')
-    start_time = time.time()
     
+    start_time = time.time()
     answer = ai.get_answer(message.text)
     duration = round(time.time() - start_time, 1)
     
+    # Javobni chiroyli ko'rinishda yuborish
     try:
         if len(answer) > 4000:
             for i in range(0, len(answer), 4000):
                 bot.send_message(message.chat.id, answer[i:i+4000])
         else:
-            bot.reply_to(message, f"{answer}\n\n_⏱ {duration} soniyada_")
-    except:
+            # Javob oxiriga vaqtni qo'shib qo'yamiz (Pro ko'rinish uchun)
+            bot.reply_to(message, f"{answer}\n\n_⚡️ {duration}s_")
+    except Exception as e:
+        logger.error(f"Yuborishda xato: {e}")
         bot.send_message(message.chat.id, answer)
 
 # --- ISHGA TUSHIRISH ---
 if __name__ == "__main__":
+    # Serverni alohida oqimda yoqamiz
     Thread(target=run_web).start()
     
-    logger.info("Eski ulanishlar tozalanmoqda...")
+    # 409 xatosini oldini olish
     bot.remove_webhook()
-    time.sleep(3)
+    time.sleep(2)
     
     while True:
         try:
-            logger.info("Bot xabar kutmoqda...")
+            logger.info("Bot polling holatida...")
             bot.polling(none_stop=True, interval=0, timeout=60)
         except Exception as e:
             logger.error(f"Polling xatosi: {e}")
