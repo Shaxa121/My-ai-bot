@@ -3,7 +3,6 @@ import requests
 import time
 import os
 import logging
-import sys
 from threading import Thread
 from flask import Flask
 
@@ -11,45 +10,40 @@ from flask import Flask
 TOKEN = '8780847488:AAGzf7a3CbKf5U88d8yEkUADLb8E8LuQvus'
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
-# Render uchun Veb-server (Majburiy qism)
+# Render uchun Veb-server (Majburiy)
 app = Flask(__name__)
 @app.route('/')
 def home():
-    return "PRO AI Bot Render'da 100% faol!", 200
+    return "Pollinations AI Bot Render'da 100% faol!", 200
 
 def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Logging (Render Logs bo'limida nima bo'layotganini ko'rish uchun)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- AI KLASSI ---
+# --- YANGI, KALIT SO'RAMAYDIGAN AI ---
 class SmartAI:
-    def __init__(self):
-        self.url = "https://www.blackbox.ai/api/chat"
-        self.headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-
     def get_answer(self, prompt, attempt=1):
         if attempt > 3:
-            return "Kechirasiz, AI serverlari band. Keyinroq urinib ko'ring. 😔"
+            return "Kechirasiz, ulanishda xatolik bo'ldi. Keyinroq urinib ko'ring. 😔"
         try:
+            url = "https://text.pollinations.ai/"
             payload = {
-                "messages": [{"role": "user", "content": prompt}],
-                "model": "deepseek-v3",
-                "max_tokens": 2048
+                "messages": [
+                    {"role": "system", "content": "Sen juda aqlli va yordamsevar botsan. Har doim O'zbek tilida, tushunarli javob berasan."},
+                    {"role": "user", "content": prompt}
+                ]
             }
-            logger.info(f"AI'ga so'rov ketdi... (Urinish: {attempt})")
-            response = requests.post(self.url, json=payload, headers=self.headers, timeout=30)
+            logger.info(f"So'rov yuborilmoqda... (Urinish: {attempt})")
+            
+            # Hech qanday Header yoki API kalit kerak emas!
+            response = requests.post(url, json=payload, timeout=30)
             
             if response.status_code == 200:
-                text = response.text
-                clean_text = text.split('$@$')[0].strip() if '$@$' in text else text.strip()
-                return clean_text if clean_text else "Javob bo'sh keldi."
+                return response.text.strip()
             else:
                 logger.warning(f"AI Xatosi: {response.status_code}. Qayta urinish...")
         except Exception as e:
@@ -63,7 +57,7 @@ ai = SmartAI()
 # --- BOT KOMANDALARI ---
 @bot.message_handler(commands=['start', 'help'])
 def welcome(message):
-    bot.reply_to(message, "🤖 *PRO AI Bot Render'da ishga tushdi!*\n\nSavolingizni bering:")
+    bot.reply_to(message, "🤖 *Yangi AI Bot ishga tushdi!*\n\nMen hech qanday API kalitsiz ishlayman. Savolingizni bering:")
 
 @bot.message_handler(func=lambda m: True)
 def chat(message):
@@ -71,33 +65,28 @@ def chat(message):
     start_time = time.time()
     
     answer = ai.get_answer(message.text)
-    
     duration = round(time.time() - start_time, 1)
-    footer = f"\n\n_⏱ {duration} soniyada javob berildi_"
     
     try:
         if len(answer) > 4000:
             for i in range(0, len(answer), 4000):
                 bot.send_message(message.chat.id, answer[i:i+4000])
         else:
-            bot.reply_to(message, answer + footer)
+            bot.reply_to(message, f"{answer}\n\n_⏱ {duration} soniyada_")
     except:
-        bot.send_message(message.chat.id, answer) # Xato bo'lsa oddiy yuboradi
+        bot.send_message(message.chat.id, answer)
 
 # --- ISHGA TUSHIRISH ---
 if __name__ == "__main__":
-    # 1. Render talab qilgan veb-serverni alohida fonda yoqamiz
     Thread(target=run_web).start()
     
-    # 2. Telegramdagi 409 xatolarni tozalaymiz
     logger.info("Eski ulanishlar tozalanmoqda...")
     bot.remove_webhook()
     time.sleep(3)
     
-    # 3. Botni uzluksiz ishga tushiramiz
     while True:
         try:
-            logger.info("Bot Telegram'ga ulandi va xabar kutyapti!")
+            logger.info("Bot xabar kutmoqda...")
             bot.polling(none_stop=True, interval=0, timeout=60)
         except Exception as e:
             logger.error(f"Polling xatosi: {e}")
