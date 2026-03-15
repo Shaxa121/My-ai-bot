@@ -5,95 +5,92 @@ from datetime import datetime
 
 # --- KONFIGURATSIYA ---
 TOKEN = '8780847488:AAFC_6Hk9CeHNdDkKTmurm-bxAq047K3G0I'
-# Yangi API kalitingiz joylandi
-GEMINI_API_KEY = 'AIzaSyBxV4e1njS4O9jvegWFs7mVXEAxz039ReY'
+# Avvalgi ishlayotgan Groq API kalitingiz
+GROQ_API_KEY = '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'
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 app = Flask(__name__)
 
-# Foydalanuvchi xotirasi (Chat History)
+# Foydalanuvchi xotirasi
 user_memory = {}
 
 @app.route('/')
-def home(): return "GEMINI PRO SYSTEM: ONLINE", 200
+def home(): return "GROQ TURBO WITH MEMORY: ONLINE", 200
 
 def run_web():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
-# --- GEMINI LOGIKASI ---
-class MasterGemini:
+# --- GROQ LOGIKASI ---
+class GroqTurboAI:
     def __init__(self):
-        # Eng barqaror v1beta API endpoint
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-        self.headers = {'Content-Type': 'application/json'}
+        self.url = "https://api.groq.com/openai/v1/chat/completions"
+        self.session = requests.Session()
+        self.headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
     def ask(self, user_id, text):
-        # 1. Haqiqiy vaqtni aniqlash
+        # 1. Haqiqiy vaqtni olish
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         # 2. Xotirani tekshirish
         if user_id not in user_memory:
             user_memory[user_id] = []
         
-        # 3. System Prompt (Botning "Dasturi")
-        history_context = [
+        # 3. System Prompt (Botning yo'riqnomasi)
+        messages = [
             {
-                "role": "user", 
-                "parts": [{"text": f"Sen aqlli o'zbek yordamchisan. Bugun: {now}. Suhbatdoshni eslab qolishing shart."}]
-            },
-            {
-                "role": "model", 
-                "parts": [{"text": "Tushundim. Men vaqtni bilaman va suhbatimizni eslab qolaman. Qanday yordam bera olaman?"}]
+                "role": "system", 
+                "content": f"Sen professional o'zbek yordamchisan. Hozirgi vaqt: {now}. Suhbatdoshni eslab qol."
             }
         ]
         
-        # Oxirgi 10 ta xabarni qo'shish (Xotira)
-        history_context.extend(user_memory[user_id][-10:])
+        # 4. Xotiradagi oxirgi 8 ta xabarni qo'shish
+        messages.extend(user_memory[user_id][-8:])
         
-        # Yangi so'rov
-        history_context.append({"role": "user", "parts": [{"text": text}]})
+        # 5. Yangi savolni qo'shish
+        messages.append({"role": "user", "content": text})
 
         try:
-            payload = {"contents": history_context}
-            res = requests.post(self.url, json=payload, headers=self.headers, timeout=30)
+            payload = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "temperature": 0.6
+            }
+            res = self.session.post(self.url, json=payload, headers=self.headers, timeout=20)
             
             if res.status_code == 200:
-                data = res.json()
-                ans = data['candidates'][0]['content']['parts'][0]['text']
+                ans = res.json()['choices'][0]['message']['content'].strip()
                 
-                # Xotirani yangilash (FAQAT muvaffaqiyatli javob bo'lsa)
-                user_memory[user_id].append({"role": "user", "parts": [{"text": text}]})
-                user_memory[user_id].append({"role": "model", "parts": [{"text": ans}]})
+                # 6. Xotirani yangilash
+                user_memory[user_id].append({"role": "user", "content": text})
+                user_memory[user_id].append({"role": "assistant", "content": ans})
                 
                 return ans
-            elif res.status_code == 400:
-                return "❌ API kalit xatosi yoki so'rov formati noto'g'ri. (Check API Key)"
-            elif res.status_code == 429:
-                return "⏳ So'rovlar juda ko'payib ketdi. Biroz kuting."
             else:
-                return f"⚠️ Xatolik kodi: {res.status_code}\nModel hali faollashmagan bo'lishi mumkin."
+                return f"⚠️ Groq xatosi: {res.status_code}"
         except Exception as e:
-            return f"❌ Tizimda muammo: {str(e)}"
+            return f"❌ Ulanishda xato: {str(e)}"
 
-ai = MasterGemini()
+ai = GroqTurboAI()
 
-# --- BOT FUNKSIYALARI ---
+# --- HANDLERS ---
 @bot.message_handler(commands=['start', 'clear'])
 def start_cmd(m):
     if m.text == '/clear':
         user_memory[m.from_user.id] = []
-        bot.reply_to(m, "🧹 **Suhbat xotirasi tozalandi!** Yangidan gaplashishimiz mumkin.")
+        bot.reply_to(m, "🧹 **Xotira tozalandi!** Yangidan gaplashishimiz mumkin.")
     else:
-        bot.reply_to(m, "🚀 **Master AI (Gemini Flash) tayyor!**\nMen sizni eslab qola olaman va vaqtni bilaman. Savolingizni bering!")
+        bot.reply_to(m, "🚀 **Groq Turbo AI ishga tushdi!**\n\nMen juda tezman, vaqtni bilaman va sizni eslab qolaman. Savol bering!")
 
 @bot.message_handler(func=lambda m: True)
 def handle_msg(m):
     bot.send_chat_action(m.chat.id, 'typing')
     
-    # Gemini AI dan javob olish
+    # Javobni olish
     response = ai.ask(m.from_user.id, m.text)
     
-    # Telegram limitiga tekshirish
     try:
         if len(response) > 4000:
             for x in range(0, len(response), 4000):
@@ -101,10 +98,9 @@ def handle_msg(m):
         else:
             bot.reply_to(m, response)
     except:
-        bot.send_message(m.chat.id, "Javob yuborishda xatolik bo'ldi.")
+        bot.send_message(m.chat.id, response)
 
 if __name__ == "__main__":
     Thread(target=run_web).start()
     bot.remove_webhook()
-    print("Bot muvaffaqiyatli yoqildi!")
-    bot.polling(none_stop=True, interval=0)
+    bot.polling(none_stop=True)
