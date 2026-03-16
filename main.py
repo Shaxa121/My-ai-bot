@@ -3,22 +3,23 @@ import os
 from flask import Flask
 from threading import Thread
 
-# Config faylingizdan faqat tokenni olamiz
-try:
-    from config import config
-    token = config.BOT_TOKEN
-except:
-    token = "7854228914:AAH_fL_Mv9vBvXjK0qG1w3yT9rA4sU5xI2o"
+# Tokenni to'g'ridan-to'g'ri shu yerga yozamiz (Xato bo'lmasligi uchun)
+TOKEN = "7854228914:AAH_fL_Mv9vBvXjK0qG1w3yT9rA4sU5xI2o"
 
-bot = telebot.TeleBot(token)
+bot = telebot.TeleBot(TOKEN)
 app = Flask('')
 
 @app.route('/')
-def home(): return "Bot is Online!"
+def home():
+    return "Master AI is Active!"
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "🚀 Master AI Infinity ishga tushdi! Men tayyorman, Shaxzod.")
+    bot.send_message(message.chat.id, "🚀 Shaxzod, botingiz 100% ishga tushdi!")
+
+@bot.message_handler(func=lambda message: True)
+def echo_all(message):
+    bot.reply_to(message, "Men xabarni oldim! Tizim ishlayapti.")
 
 def run():
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
