@@ -3,3 +3,5 @@ groq
 yt-dlp
 flask
 requests
+psutil
+googletrans==3.1.0a0
