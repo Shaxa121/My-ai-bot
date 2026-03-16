@@ -1,6 +1,6 @@
 pyTelegramBotAPI
 groq
-yt-dlp
 flask
 requests
 psutil
+yt-dlp
