@@ -1,41 +1,19 @@
 import requests
-from config import config
 
-class WeatherEngine:
-    def __init__(self):
-        self.api_key = config.WEATHER_API_KEY
-        self.base_url = "http://api.openweathermap.org/data/2.5/weather"
-
-    def get_weather(self, city="Bukhara"):
-        try:
-            params = {
-                'q': city,
-                'appid': self.api_key,
-                'units': 'metric',
-                'lang': 'uz'
-            }
-            response = requests.get(self.base_url, params=params).json()
-            
-            if response.get("cod") != 200:
-                return "❌ Shahar topilmadi yoki API xatosi."
-
-            temp = response['main']['temp']
-            desc = response['weather'][0]['description']
-            humidity = response['main']['humidity']
-            
-            # Aqlli maslahat mantiqi
-            advice = "Yengil kiyinib oling."
-            if temp < 10: advice = "Issiq kiyining, havo sovuq!"
-            elif temp < 20: advice = "Ustingizga nimadir olib oling, salqin."
-
-            return (
-                f"🌤 **{city} ob-havosi:**\n"
-                f"🌡 Harorat: {temp}°C\n"
-                f"📝 Holat: {desc.capitalize()}\n"
-                f"💧 Namlik: {humidity}%\n\n"
-                f"💡 Maslahat: {advice}"
-            )
-        except Exception as e:
-            return f"Ob-havo tizimida xato: {str(e)}"
-
-weather = WeatherEngine()
+def get_weather(city="Bukhara"):
+    """
+    Berilgan shahar uchun ob-havo ma'lumotlarini qaytaradi.
+    wttr.in servisidan foydalaniladi (Tekin va ochiq).
+    """
+    try:
+        # O'zbek tilida ma'lumot olish uchun lang=uz parametrini qo'shamiz
+        # format: %c (belgi) %t (harorat) %C (holat) %h (namlik)
+        url = f"https://wttr.in/{city}?format=%c+%t+%C+Namlik:+%h&lang=uz"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            return f"🌤 **{city} ob-havosi:**\n\n{response.text}"
+        else:
+            return "❌ Ob-havo ma'lumotlarini yuklashda xatolik yuz berdi."
+    except Exception as e:
+        return f"❌ Xatolik: Tarmoq bilan bog'lanib bo'lmadi."
