@@ -4,9 +4,12 @@ import os
 from flask import Flask
 from threading import Thread
 
-# --- YANGI TOKEN VA SOZLAMALAR ---
+# --- SOZLAMALAR ---
+# Telegram bot tokeningiz (Oxirgi berganingiz)
 TOKEN = "8780847488:AAH75r9SwIrXUeCcfe-lKgdwljuu45eUx00"
-GROQ_KEY = "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"
+
+# Groq API kaliti (Yangi berganingiz)
+GROQ_KEY = "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"
 
 bot = telebot.TeleBot(TOKEN)
 client = groq.Client(api_key=GROQ_KEY)
@@ -14,11 +17,11 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "<h1>Master AI Infinity is Online!</h1>"
+    return "<h1>Master AI Infinity is Active!</h1>"
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.reply_to(message, "🚀 Assalomu alaykum Shaxzod! Yangi tizim muvaffaqiyatli ishga tushdi. Men tayyorman!")
+    bot.reply_to(message, "🚀 Master AI Infinity ishga tushdi! Men tayyorman, Shaxzod.")
 
 @bot.message_handler(func=lambda message: True)
 def handle_ai(message):
@@ -33,14 +36,15 @@ def handle_ai(message):
         )
         bot.reply_to(message, chat_completion.choices[0].message.content)
     except Exception as e:
-        bot.reply_to(message, f"❌ Xatolik yuz berdi: {str(e)}")
+        bot.reply_to(message, f"❌ AI xatosi: {str(e)}")
 
 def run():
-    # Render uchun port 8080
+    # Render uchun 8080 porti
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
 if __name__ == "__main__":
+    # Flaskni alohida yo'lakda (thread) ishga tushiramiz
     t = Thread(target=run)
     t.start()
-    print("Bot yashil chiroqda...")
+    print("Bot xabarlarni kutmoqda...")
     bot.infinity_polling()
